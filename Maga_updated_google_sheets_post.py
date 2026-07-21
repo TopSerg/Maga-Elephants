@@ -13,10 +13,10 @@ MIPT_URL = (
 )
 
 GOOGLE_SPREADSHEET_ID = "19ksmM7HZ8TXO85FDsob48NxsHz9Ue9jY68JsO0tCHc0"
-GOOGLE_SHEET_GID = "795877096"
+GOOGLE_SHEET_NAME = "Расшифровки"
 GOOGLE_SHEET_CSV_URL = (
     f"https://docs.google.com/spreadsheets/d/{GOOGLE_SPREADSHEET_ID}/"
-    f"export?format=csv&gid={GOOGLE_SHEET_GID}"
+    "gviz/tq"
 )
 
 APPS_SCRIPT_URL = (
@@ -94,9 +94,13 @@ def convert_score(value):
 
 
 def get_people_from_google_sheet() -> list[dict[str, str]]:
-    """Загружает коды строго из второго столбца Google Таблицы."""
+    """Загружает имена и коды из листа «Расшифровки» Google Таблицы."""
     response = requests.get(
         GOOGLE_SHEET_CSV_URL,
+        params={
+            "tqx": "out:csv",
+            "sheet": GOOGLE_SHEET_NAME,
+        },
         headers=REQUEST_HEADERS,
         timeout=30,
     )
@@ -110,36 +114,44 @@ def get_people_from_google_sheet() -> list[dict[str, str]]:
             "Откройте доступ: «Все, у кого есть ссылка — Читатель»."
         )
 
-    # header=None: заголовки не анализируются. Берём столбец B по позиции.
     # BytesIO исключает искажение русских символов из-за неверной кодировки requests.
-    table = pd.read_csv(BytesIO(response.content), dtype=str, header=None)
+    table = pd.read_csv(BytesIO(response.content), dtype=str)
+    table.columns = [normalize_column_name(column) for column in table.columns]
 
-    if table.shape[1] < 2:
+    code_column = find_column(table.columns, "Уникальный код")
+    name_column = find_column(table.columns, "Фамилия, Имя")
+
+    if code_column is None:
         raise ValueError(
-            "В Google Таблице отсутствует второй столбец с кодами."
+            f"В листе «{GOOGLE_SHEET_NAME}» отсутствует столбец "
+            "«Уникальный код»."
         )
 
     people: list[dict[str, str]] = []
     seen_codes: set[str] = set()
 
-    # Первая строка считается строкой заголовков и пропускается.
-    for value in table.iloc[1:, 1]:
-        code = normalize_code(value)
+    for _, row in table.iterrows():
+        code = normalize_code(row[code_column])
 
-        # Пропускаем пустые значения, ошибки формул и текст заголовка.
+        # Пропускаем пустые значения, ошибки формул и повторяющиеся коды.
         if not code or code.startswith("#"):
-            continue
-        if code.casefold() in {"код", "уникальный код"}:
             continue
         if code in seen_codes:
             continue
 
-        people.append({"Уникальный код": code})
+        name = ""
+        if name_column is not None and not pd.isna(row[name_column]):
+            name = str(row[name_column]).strip()
+
+        people.append({
+            "Фамилия, Имя": name,
+            "Уникальный код": code,
+        })
         seen_codes.add(code)
 
     if not people:
         raise ValueError(
-            "Во втором столбце Google Таблицы не найдено ни одного корректного кода."
+            f"В листе «{GOOGLE_SHEET_NAME}» не найдено ни одного корректного кода."
         )
 
     return people
@@ -293,7 +305,7 @@ def save_results_to_excel(
 
 def main() -> None:
     try:
-        print("Загружаю коды из второго столбца Google Таблицы...")
+        print(f"Загружаю коды из листа «{GOOGLE_SHEET_NAME}» Google Таблицы...")
         people = get_people_from_google_sheet()
         print(f"Загружено записей: {len(people)}")
 
