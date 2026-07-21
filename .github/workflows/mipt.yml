@@ -2,7 +2,7 @@ name: MIPT scores update
 
 on:
   schedule:
-    - cron: "00 * * * *"
+    - cron: "15 * * * *"
 
   # Позволяет запустить скрипт вручную кнопкой.
   workflow_dispatch:
