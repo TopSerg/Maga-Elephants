@@ -2,9 +2,7 @@ name: MIPT scores update
 
 on:
   schedule:
-    # GitHub Actions использует UTC.
-    # 06:00 UTC и 18:00 UTC.
-    - cron: "0 6,18 * * *"
+    - cron: "00 * * * *"
 
   # Позволяет запустить скрипт вручную кнопкой.
   workflow_dispatch:
